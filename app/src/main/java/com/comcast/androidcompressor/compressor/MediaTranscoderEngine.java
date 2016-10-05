@@ -116,12 +116,11 @@ public class MediaTranscoderEngine {
         String rotationString = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
         try {
             mRotation = Integer.parseInt(rotationString);
-            if (!formatStrategy.isFormalizingVideoOrientation()) {
+            Log.d(TAG, "Rotation: " + mRotation);
+            if (!formatStrategy.isFormalizingOrientation()) {
                 mMuxer.setOrientationHint(mRotation);
             }
-        } catch (NumberFormatException e) {
-        }
-        Log.d(TAG, "Rotation: " + mRotation);
+        } catch (NumberFormatException e) {}
 
         // TODO: parse ISO 6709
         // String locationString = mediaMetadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION);
@@ -137,7 +136,7 @@ public class MediaTranscoderEngine {
 
     private void setupTrackTranscoders(MediaOutputFormat formatStrategy) {
         MediaExtractorUtils.TrackResult trackResult = MediaExtractorUtils.getFirstVideoAndAudioTrack(mExtractor);
-        MediaFormat videoOutputFormat = formatStrategy.createVideoOutputFormat(trackResult.mVideoTrackFormat);
+        MediaFormat videoOutputFormat = formatStrategy.createVideoOutputFormat(trackResult.mVideoTrackFormat, mRotation);
         MediaFormat audioOutputFormat = formatStrategy.createAudioOutputFormat(trackResult.mAudioTrackFormat);
         if (videoOutputFormat == null && audioOutputFormat == null) {
             throw new InvalidOutputFormatException("MediaOutputFormat returned pass-through for both video and audio. No transcoding is necessary.");
@@ -165,7 +164,7 @@ public class MediaTranscoderEngine {
             mVideoTrackTranscoder = new VideoTrackTranscoder(mExtractor, trackResult.mVideoTrackIndex, videoOutputFormat, queuedMuxer);
         }
         mVideoTrackTranscoder.setup();
-        ((VideoTrackTranscoder) mVideoTrackTranscoder).setOriginalOrientation(formatStrategy.isFormalizingVideoOrientation(), mRotation);
+        ((VideoTrackTranscoder)mVideoTrackTranscoder).setOriginalOrientation(formatStrategy.isFormalizingOrientation(), mRotation);
 
         if (audioOutputFormat == null) {
             mAudioTrackTranscoder = new PassThroughTrackTranscoder(mExtractor, trackResult.mAudioTrackIndex, queuedMuxer, QueuedMuxer.SampleType.AUDIO);
@@ -189,11 +188,15 @@ public class MediaTranscoderEngine {
                     || mAudioTrackTranscoder.stepPipeline();
             loopCount++;
             if (mDurationUs > 0 && loopCount % PROGRESS_INTERVAL_STEPS == 0) {
-                double videoProgress = mVideoTrackTranscoder.isFinished() ? 1.0 : Math.min(1.0, (double) mVideoTrackTranscoder.getWrittenPresentationTimeUs() / mDurationUs);
-                double audioProgress = mAudioTrackTranscoder.isFinished() ? 1.0 : Math.min(1.0, (double) mAudioTrackTranscoder.getWrittenPresentationTimeUs() / mDurationUs);
-                double progress = (videoProgress + audioProgress) / 2.0;
-                mProgress = progress;
-                if (mProgressCallback != null) mProgressCallback.onProgress(progress);
+                long videoProgress = mVideoTrackTranscoder.isFinished() ? 100 : Math.min(100, 100*mVideoTrackTranscoder.getWrittenPresentationTimeUs() / mDurationUs);
+                long audioProgress = mAudioTrackTranscoder.isFinished() ? 100 : Math.min(100, 100*mAudioTrackTranscoder.getWrittenPresentationTimeUs() / mDurationUs);
+                long progress = (videoProgress + audioProgress) / 2;
+                if (mProgress != progress) {
+                    mProgress = progress;
+                    if (mProgressCallback != null) {
+                        mProgressCallback.onProgress(progress);
+                    }
+                }
             }
             if (!stepped) {
                 try {

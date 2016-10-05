@@ -11,7 +11,7 @@ public interface MediaOutputFormat {
      * @return null for passthrough.
      * @throws OutputFormatUnavailableException if input could not be transcoded because of restrictions.
      */
-    public MediaFormat createVideoOutputFormat(MediaFormat inputFormat);
+    public MediaFormat createVideoOutputFormat(MediaFormat inputFormat, int inputOrientation);
 
     /**
      * Caution: this method should return null currently.
@@ -27,5 +27,5 @@ public interface MediaOutputFormat {
      *
      * @return true if asking for formalizing video orientation, otherwise false
      */
-    public boolean isFormalizingVideoOrientation();
+    public boolean isFormalizingOrientation();
 }

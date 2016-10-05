@@ -12,7 +12,6 @@ import android.util.Log;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
-import java.nio.IntBuffer;
 
 /**
  * Code for rendering a texture onto a surface using OpenGL ES 2.0.
@@ -67,12 +66,12 @@ class TextureRender {
     public int getTextureId() {
         return mTextureID;
     }
-    public void drawFrame(SurfaceTexture st, boolean isFormalizingVideoOrientation, int originalOrientation) {
+    public void drawFrame(SurfaceTexture st, boolean isFormalizingOrientation, int originalOrientation) {
         checkGlError("onDrawFrame start");
         st.getTransformMatrix(mSTMatrix);
 
         // rotate video based on original orientation
-        if (isFormalizingVideoOrientation) {
+        if (isFormalizingOrientation) {
             switch (originalOrientation) {
                 case 90:
                     Matrix.rotateM(mSTMatrix, 0, originalOrientation, 0, 0, 1);

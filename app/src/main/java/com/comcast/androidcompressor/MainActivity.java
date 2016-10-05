@@ -223,6 +223,16 @@ public class MainActivity extends AppCompatActivity {
                         public void onFailed(Exception exception) {
                             onCompressFinished(false, "Transcoder error occurred.", parcelFileDescriptor);
                         }
+
+                        @Override
+                        public void cancel() {
+
+                        }
+
+                        @Override
+                        public void closeInputStream() {
+
+                        }
                     };
 
                     mFuture = MediaCompressor.getInstance().compress(fileDescriptor, file.getAbsolutePath(),

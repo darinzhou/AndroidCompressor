@@ -1,6 +1,7 @@
 package com.comcast.androidcompressor.compressor;
 
 import android.media.MediaFormat;
+
 import java.nio.ByteBuffer;
 
 class MediaFormatValidator {

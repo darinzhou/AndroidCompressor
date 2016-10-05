@@ -35,7 +35,7 @@ public class VideoTrackTranscoder implements TrackTranscoder {
     private boolean mEncoderStarted;
     private long mWrittenPresentationTimeUs;
 
-    private boolean mIsFormalizingVideoOrientation;
+    private boolean mIsFormalizingOrientation;
     private int mOriginalOrientation;
 
     public VideoTrackTranscoder(MediaExtractor extractor, int trackIndex,
@@ -138,8 +138,8 @@ public class VideoTrackTranscoder implements TrackTranscoder {
         }
     }
 
-    public void setOriginalOrientation(boolean isFormalizingVideoOrientation, int originalOrientation) {
-        mIsFormalizingVideoOrientation = isFormalizingVideoOrientation;
+    public void setOriginalOrientation(boolean isFormalizingOrientation, int originalOrientation) {
+        mIsFormalizingOrientation = isFormalizingOrientation;
         mOriginalOrientation = originalOrientation;
     }
 
@@ -188,7 +188,8 @@ public class VideoTrackTranscoder implements TrackTranscoder {
         mDecoder.releaseOutputBuffer(result, doRender);
         if (doRender) {
             mDecoderOutputSurfaceWrapper.awaitNewImage();
-            mDecoderOutputSurfaceWrapper.drawImage(mIsFormalizingVideoOrientation, mOriginalOrientation);
+            // render frame based on original video orientation and whether to formalize
+            mDecoderOutputSurfaceWrapper.drawImage(mIsFormalizingOrientation, mOriginalOrientation);
             mEncoderInputSurfaceWrapper.setPresentationTime(mBufferInfo.presentationTimeUs * 1000);
             mEncoderInputSurfaceWrapper.swapBuffers();
         }

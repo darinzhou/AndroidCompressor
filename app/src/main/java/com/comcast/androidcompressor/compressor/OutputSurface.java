@@ -51,7 +51,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         makeCurrent();
         setup();
     }
-
     /**
      * Creates an OutputSurface using the current EGL context (rather than establishing a
      * new one).  Creates a Surface that can be passed to MediaCodec.configure().
@@ -59,7 +58,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
     public OutputSurface() {
         setup();
     }
-
     /**
      * Creates instances of TextureRender and SurfaceTexture, and a Surface associated
      * with the SurfaceTexture.
@@ -87,7 +85,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         mSurfaceTexture.setOnFrameAvailableListener(this);
         mSurface = new Surface(mSurfaceTexture);
     }
-
     /**
      * Prepares EGL.  We want a GLES 2.0 context and a surface that supports pbuffer.
      */
@@ -141,7 +138,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
             throw new RuntimeException("surface was null");
         }
     }
-
     /**
      * Discard all resources held by this class, notably the EGL context.
      */
@@ -163,7 +159,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         mSurface = null;
         mSurfaceTexture = null;
     }
-
     /**
      * Makes our EGL context and surface current.
      */
@@ -172,21 +167,18 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
             throw new RuntimeException("eglMakeCurrent failed");
         }
     }
-
     /**
      * Returns the Surface that we draw onto.
      */
     public Surface getSurface() {
         return mSurface;
     }
-
     /**
      * Replaces the fragment shader.
      */
     public void changeFragmentShader(String fragmentShader) {
         mTextureRender.changeFragmentShader(fragmentShader);
     }
-
     /**
      * Latches the next buffer into the texture.  Must be called from the thread that created
      * the OutputSurface object, after the onFrameAvailable callback has signaled that new
@@ -215,10 +207,8 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
         mTextureRender.checkGlError("before updateTexImage");
         mSurfaceTexture.updateTexImage();
     }
-
     /**
      * Wait up to given timeout until new image become available.
-     *
      * @param timeoutMs
      * @return true if new image is available. false for no new image until timeout.
      */
@@ -248,8 +238,8 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
     /**
      * Draws the data from SurfaceTexture onto the current EGL surface.
      */
-    public void drawImage(boolean isFormalizingVideoOrientation, int originalOrientation) {
-        mTextureRender.drawFrame(mSurfaceTexture, isFormalizingVideoOrientation, originalOrientation);
+    public void drawImage(boolean isFormalizingOrientation, int originalOrientation) {
+        mTextureRender.drawFrame(mSurfaceTexture, isFormalizingOrientation, originalOrientation);
     }
 
     @Override
@@ -263,7 +253,6 @@ class OutputSurface implements SurfaceTexture.OnFrameAvailableListener {
             mFrameSyncObject.notifyAll();
         }
     }
-
     /**
      * Checks for EGL errors.
      */

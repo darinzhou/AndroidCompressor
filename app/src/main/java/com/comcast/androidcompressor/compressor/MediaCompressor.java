@@ -7,6 +7,7 @@ import android.util.Log;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -39,12 +40,24 @@ public class MediaCompressor {
          * Called when transcode failed.
          */
         void onFailed(Exception exception);
+
+        /**
+         * Called to cancel the listener.
+         */
+        void cancel();
+
+        /**
+         * Called to close the input stream.
+         */
+        void closeInputStream();
     }
 
     private static final String TAG = "MediaCompressor";
     private static final int MAXIMUM_THREAD = 8; // TODO
     private static volatile MediaCompressor mMediaCompressor;
     private ThreadPoolExecutor mExecutor;
+
+    private LinkedHashMap<Future<Void>, Listener> mTasks;
 
     private MediaCompressor() {
         int cpus = Runtime.getRuntime().availableProcessors();
@@ -60,6 +73,8 @@ public class MediaCompressor {
                         return new Thread(r, "MediaCompressor-Worker");
                     }
                 });
+
+        mTasks = new LinkedHashMap<>();
     }
 
     public static MediaCompressor getInstance() {
@@ -73,6 +88,63 @@ public class MediaCompressor {
         return mMediaCompressor;
     }
 
+    public void setListener(Future<Void> future, final Listener listener) {
+        if (future != null) {
+
+            // get original listener
+            final Listener oldListener = mTasks.get(future);
+
+            // merge listeners
+            Listener newListerner = new Listener() {
+                @Override
+                public void onProgress(double progress) {
+                    listener.onProgress(progress);
+                }
+
+                @Override
+                public void onSucceed() {
+                    closeInputStream();
+                    listener.onSucceed();
+                }
+
+                @Override
+                public void onCanceled() {
+                    closeInputStream();
+                    listener.onCanceled();
+                }
+
+                @Override
+                public void onFailed(Exception exception) {
+                    closeInputStream();
+                    listener.onFailed(exception);
+                }
+
+                @Override
+                public void cancel() {
+                    listener.cancel();
+                }
+
+                @Override
+                public void closeInputStream() {
+                    oldListener.closeInputStream();
+                }
+            };
+
+            // update listener
+            mTasks.put(future, newListerner);
+        }
+    }
+
+    public void cancel(Future<Void> future) {
+        if (future != null) {
+            Listener listener = mTasks.get(future);
+            if (listener != null) {
+                listener.cancel();
+            }
+            future.cancel(true);
+        }
+    }
+
     /**
      * Transcodes video file asynchronously.
      * Audio track will be kept unchanged.
@@ -83,7 +155,7 @@ public class MediaCompressor {
      * @param listener          Listener instance for callback.
      * @throws IOException if input file could not be read.
      */
-    public Future<Void> compress(final String inPath, final String outPath, final MediaOutputFormat outFormatStrategy, final Listener listener) throws IOException {
+    public Future<Void> compress(final String inPath, final String outPath, final MediaOutputFormat outFormatStrategy, final Listener listener) {
         FileInputStream fileInputStream = null;
         FileDescriptor inFileDescriptor;
         try {
@@ -97,10 +169,12 @@ public class MediaCompressor {
                     Log.e(TAG, "Can't close input stream: ", eClose);
                 }
             }
-            throw e;
+            return null;
         }
+
+        // merge listener
         final FileInputStream finalFileInputStream = fileInputStream;
-        return compress(inFileDescriptor, outPath, outFormatStrategy, new Listener() {
+        Listener newListerner = new Listener() {
             @Override
             public void onProgress(double progress) {
                 listener.onProgress(progress);
@@ -108,30 +182,39 @@ public class MediaCompressor {
 
             @Override
             public void onSucceed() {
+                closeInputStream();
                 listener.onSucceed();
-                closeStream();
             }
 
             @Override
             public void onCanceled() {
+                closeInputStream();
                 listener.onCanceled();
-                closeStream();
             }
 
             @Override
             public void onFailed(Exception exception) {
+                closeInputStream();
                 listener.onFailed(exception);
-                closeStream();
             }
 
-            private void closeStream() {
+            @Override
+            public void cancel() {
+                listener.cancel();
+            }
+
+            @Override
+            public void closeInputStream() {
                 try {
                     finalFileInputStream.close();
                 } catch (IOException e) {
                     Log.e(TAG, "Can't close input stream: ", e);
                 }
             }
-        });
+        };
+
+        // compress
+        return compress(inFileDescriptor, outPath, outFormatStrategy, newListerner);
     }
 
     /**
@@ -140,7 +223,9 @@ public class MediaCompressor {
      *
      * @param inFileDescriptor  FileDescriptor for input.
      * @param outPath           File path for output.
-     * @param outFormatStrategy Strategy for output video format.
+     * @param outFormatStrategy S
+     *
+     *                          trategy for output video format.
      * @param listener          Listener instance for callback.
      */
     public Future<Void> compress(final FileDescriptor inFileDescriptor, final String outPath, final MediaOutputFormat outFormatStrategy, final Listener listener) {
@@ -160,7 +245,11 @@ public class MediaCompressor {
                             handler.post(new Runnable() { // TODO: reuse instance
                                 @Override
                                 public void run() {
-                                    listener.onProgress(progress);
+                                    Future<Void> future = futureReference.get();
+                                    Listener listener = mTasks.get(future);
+                                    if (listener != null) {
+                                        listener.onProgress(progress);
+                                    }
                                 }
                             });
                         }
@@ -169,7 +258,7 @@ public class MediaCompressor {
                     engine.transcodeVideo(outPath, outFormatStrategy);
                 } catch (IOException e) {
                     Log.w(TAG, "Transcode failed: input file (fd: " + inFileDescriptor.toString() + ") not found"
-                            + " or could not open output file ('" + outPath + "') .", e);
+                            + " or could not open output file ('" + outPath + "').", e);
                     caughtException = e;
                 } catch (InterruptedException e) {
                     Log.i(TAG, "Cancel transcode video file.", e);
@@ -183,14 +272,17 @@ public class MediaCompressor {
                 handler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (exception == null) {
-                            listener.onSucceed();
-                        } else {
-                            Future<Void> future = futureReference.get();
-                            if (future != null && future.isCancelled()) {
-                                listener.onCanceled();
+                        Future<Void> future = futureReference.get();
+                        Listener listener = mTasks.get(future);
+                        if (listener != null) {
+                            if (exception == null) {
+                                listener.onSucceed();
                             } else {
-                                listener.onFailed(exception);
+                                if (future != null && future.isCancelled()) {
+                                    listener.onCanceled();
+                                } else {
+                                    listener.onFailed(exception);
+                                }
                             }
                         }
                     }
@@ -200,8 +292,10 @@ public class MediaCompressor {
                 return null;
             }
         });
+
         futureReference.set(createdFuture);
-        return createdFuture;
+        mTasks.put(futureReference.get(), listener);
+        return futureReference.get();
     }
 
 }
